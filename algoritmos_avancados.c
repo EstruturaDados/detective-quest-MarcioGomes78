@@ -4,6 +4,8 @@
 
 #define TAM_NOME 50
 #define TAM_PISTA 100
+#define TAM_SUSPEITO 50
+#define TAM_HASH 20
 
 // Estrutura para representar um cômodo (nó da árvore binária)
 struct Sala {
@@ -20,6 +22,18 @@ struct NoPista {
     struct NoPista *direita;
 };
 
+// Estrutura para um nó da lista encadeada na tabela hash
+struct NoHash {
+    char pista[TAM_PISTA];
+    char suspeito[TAM_SUSPEITO];
+    struct NoHash *proximo;
+};
+
+// Tabela hash (array de ponteiros para listas encadeadas)
+struct TabelaHash {
+    struct NoHash *tabela[TAM_HASH];
+};
+
 // Protótipos das funções - Salas
 struct Sala* criarSala(char *nome, char *pista);
 void liberarArvore(struct Sala *raiz);
@@ -27,10 +41,20 @@ void liberarArvore(struct Sala *raiz);
 // Protótipos das funções - Pistas (BST)
 struct NoPista* inserirPista(struct NoPista *raiz, char *pista);
 void exibirPistas(struct NoPista *raiz);
+void contarPistas(struct NoPista *raiz, int *contador);
 void liberarPistas(struct NoPista *raiz);
 
-// Protótipos das funções - Exploração
+// Protótipos das funções - Tabela Hash
+void inicializarHash(struct TabelaHash *hash);
+int funcaoHash(char *chave);
+void inserirNaHash(struct TabelaHash *hash, char *pista, char *suspeito);
+char* encontrarSuspeito(struct TabelaHash *hash, char *pista);
+void contarPistasPorSuspeito(struct NoPista *raiz, struct TabelaHash *hash, char *suspeito, int *contador);
+void liberarHash(struct TabelaHash *hash);
+
+// Protótipos das funções - Exploração e Julgamento
 void explorarSalasComPistas(struct Sala *salaAtual, struct NoPista **arvorePistas);
+void verificarSuspeitoFinal(struct NoPista *arvorePistas, struct TabelaHash *hash);
 
 /**
  * Função principal
@@ -38,11 +62,15 @@ void explorarSalasComPistas(struct Sala *salaAtual, struct NoPista **arvorePista
  */
 int main() {
     struct NoPista *arvorePistas = NULL;  // BST para armazenar pistas coletadas
+    struct TabelaHash tabelaHash;         // Tabela hash para associar pistas a suspeitos
     
     printf("========================================\n");
     printf("  DETETIVE QUEST - MANSAO DAS PISTAS\n");
     printf("========================================\n\n");
     printf("Construindo o mapa da mansao...\n\n");
+    
+    // Inicializar tabela hash
+    inicializarHash(&tabelaHash);
     
     // Criar o Hall de entrada (raiz da árvore)
     struct Sala *hall = criarSala("Hall de Entrada", "");
@@ -73,6 +101,35 @@ int main() {
     hall->direita->direita->direita = criarSala("Jardim Externo", "Rastro de sangue");
     
     printf("Mapa construido com sucesso!\n");
+    
+    // Associar pistas a suspeitos na tabela hash
+    printf("Carregando banco de dados de suspeitos...\n\n");
+    inserirNaHash(&tabelaHash, "Vela apagada encontrada no chao", "Sr. Viktor");
+    inserirNaHash(&tabelaHash, "Livro aberto na pagina 237", "Dra. Helena");
+    inserirNaHash(&tabelaHash, "Faca com manchas suspeitas", "Chef Marcelo");
+    inserirNaHash(&tabelaHash, "Taca de vinho quebrada", "Sra. Beatriz");
+    inserirNaHash(&tabelaHash, "Carta anonima rasgada", "Sr. Viktor");
+    inserirNaHash(&tabelaHash, "Partitura com anotacoes", "Maestro Eduardo");
+    inserirNaHash(&tabelaHash, "Porta arrombada por dentro", "Chef Marcelo");
+    inserirNaHash(&tabelaHash, "Garrafa de veneno vazia", "Dra. Helena");
+    inserirNaHash(&tabelaHash, "Pegadas na terra", "Jardineiro Carlos");
+    inserirNaHash(&tabelaHash, "Janela forcada", "Sra. Beatriz");
+    inserirNaHash(&tabelaHash, "Dinheiro desaparecido", "Sr. Viktor");
+    inserirNaHash(&tabelaHash, "Mesa revirada", "Chef Marcelo");
+    inserirNaHash(&tabelaHash, "Estatua quebrada", "Maestro Eduardo");
+    inserirNaHash(&tabelaHash, "Rastro de sangue", "Dra. Helena");
+    
+    printf("========================================\n");
+    printf("SUSPEITOS CONHECIDOS:\n");
+    printf("========================================\n");
+    printf("1. Sr. Viktor\n");
+    printf("2. Dra. Helena\n");
+    printf("3. Chef Marcelo\n");
+    printf("4. Sra. Beatriz\n");
+    printf("5. Maestro Eduardo\n");
+    printf("6. Jardineiro Carlos\n");
+    printf("========================================\n\n");
+    
     printf("Voce esta no Hall de Entrada.\n");
     printf("Explore a mansao e colete pistas!\n\n");
     
@@ -85,17 +142,23 @@ int main() {
     printf("========================================\n");
     if(arvorePistas == NULL) {
         printf("Nenhuma pista foi coletada.\n");
+        printf("========================================\n");
     } else {
         printf("Pistas em ordem alfabetica:\n\n");
         exibirPistas(arvorePistas);
+        printf("========================================\n");
+        
+        // Fase de julgamento final
+        verificarSuspeitoFinal(arvorePistas, &tabelaHash);
     }
-    printf("========================================\n");
     
     // Liberar memória alocada
     liberarArvore(hall);
     liberarPistas(arvorePistas);
+    liberarHash(&tabelaHash);
     
-    printf("\nObrigado por jogar Detetive Quest!\n");
+    printf("\n========================================\n");
+    printf("Obrigado por jogar Detetive Quest!\n");
     printf("========================================\n");
     
     return 0;
@@ -169,6 +232,21 @@ void exibirPistas(struct NoPista *raiz) {
 }
 
 /**
+ * Conta o número total de pistas na árvore
+ * @param raiz Raiz da árvore de pistas
+ * @param contador Ponteiro para o contador
+ */
+void contarPistas(struct NoPista *raiz, int *contador) {
+    if(raiz == NULL) {
+        return;
+    }
+    
+    contarPistas(raiz->esquerda, contador);
+    (*contador)++;
+    contarPistas(raiz->direita, contador);
+}
+
+/**
  * Libera toda a memória da árvore de pistas
  * @param raiz Raiz da árvore de pistas
  */
@@ -180,6 +258,176 @@ void liberarPistas(struct NoPista *raiz) {
     liberarPistas(raiz->esquerda);
     liberarPistas(raiz->direita);
     free(raiz);
+}
+
+/**
+ * Inicializa a tabela hash com todas as posições NULL
+ * @param hash Ponteiro para a tabela hash
+ */
+void inicializarHash(struct TabelaHash *hash) {
+    int i;
+    for(i = 0; i < TAM_HASH; i++) {
+        hash->tabela[i] = NULL;
+    }
+}
+
+/**
+ * Função hash simples que calcula o índice baseado na soma dos caracteres
+ * @param chave String da pista
+ * @return Índice na tabela hash
+ */
+int funcaoHash(char *chave) {
+    int soma = 0;
+    int i;
+    
+    for(i = 0; chave[i] != '\0'; i++) {
+        soma += chave[i];
+    }
+    
+    return soma % TAM_HASH;
+}
+
+/**
+ * Insere uma associação pista-suspeito na tabela hash
+ * Trata colisões usando encadeamento (lista encadeada)
+ * @param hash Ponteiro para a tabela hash
+ * @param pista String da pista (chave)
+ * @param suspeito Nome do suspeito (valor)
+ */
+void inserirNaHash(struct TabelaHash *hash, char *pista, char *suspeito) {
+    int indice = funcaoHash(pista);
+    
+    struct NoHash *novoNo = (struct NoHash*)malloc(sizeof(struct NoHash));
+    if(novoNo == NULL) {
+        printf("Erro ao alocar memoria para hash!\n");
+        exit(1);
+    }
+    
+    strcpy(novoNo->pista, pista);
+    strcpy(novoNo->suspeito, suspeito);
+    novoNo->proximo = hash->tabela[indice];
+    hash->tabela[indice] = novoNo;
+}
+
+/**
+ * Encontra o suspeito associado a uma pista na tabela hash
+ * @param hash Ponteiro para a tabela hash
+ * @param pista String da pista a buscar
+ * @return Nome do suspeito ou NULL se não encontrado
+ */
+char* encontrarSuspeito(struct TabelaHash *hash, char *pista) {
+    int indice = funcaoHash(pista);
+    struct NoHash *atual = hash->tabela[indice];
+    
+    while(atual != NULL) {
+        if(strcmp(atual->pista, pista) == 0) {
+            return atual->suspeito;
+        }
+        atual = atual->proximo;
+    }
+    
+    return NULL;
+}
+
+/**
+ * Conta quantas pistas coletadas apontam para um suspeito específico
+ * @param raiz Raiz da árvore de pistas
+ * @param hash Ponteiro para a tabela hash
+ * @param suspeito Nome do suspeito a verificar
+ * @param contador Ponteiro para o contador
+ */
+void contarPistasPorSuspeito(struct NoPista *raiz, struct TabelaHash *hash, char *suspeito, int *contador) {
+    if(raiz == NULL) {
+        return;
+    }
+    
+    contarPistasPorSuspeito(raiz->esquerda, hash, suspeito, contador);
+    
+    char *suspeitoEncontrado = encontrarSuspeito(hash, raiz->pista);
+    if(suspeitoEncontrado != NULL && strcmp(suspeitoEncontrado, suspeito) == 0) {
+        (*contador)++;
+    }
+    
+    contarPistasPorSuspeito(raiz->direita, hash, suspeito, contador);
+}
+
+/**
+ * Libera toda a memória da tabela hash
+ * @param hash Ponteiro para a tabela hash
+ */
+void liberarHash(struct TabelaHash *hash) {
+    int i;
+    struct NoHash *atual, *temp;
+    
+    for(i = 0; i < TAM_HASH; i++) {
+        atual = hash->tabela[i];
+        while(atual != NULL) {
+            temp = atual;
+            atual = atual->proximo;
+            free(temp);
+        }
+    }
+}
+
+/**
+ * Conduz a fase de julgamento final
+ * Solicita acusação do jogador e verifica se há evidências suficientes
+ * @param arvorePistas Árvore BST com pistas coletadas
+ * @param hash Tabela hash com associações pista-suspeito
+ */
+void verificarSuspeitoFinal(struct NoPista *arvorePistas, struct TabelaHash *hash) {
+    char acusado[TAM_SUSPEITO];
+    int pistasEncontradas = 0;
+    int totalPistas = 0;
+    
+    contarPistas(arvorePistas, &totalPistas);
+    
+    printf("\n========================================\n");
+    printf("       FASE DE JULGAMENTO\n");
+    printf("========================================\n");
+    printf("Total de pistas coletadas: %d\n\n", totalPistas);
+    
+    printf("Com base nas evidencias, quem voce acusa?\n");
+    printf("Digite o nome completo do suspeito: ");
+    getchar(); // Limpar buffer
+    fgets(acusado, TAM_SUSPEITO, stdin);
+    acusado[strcspn(acusado, "\n")] = '\0';
+    
+    printf("\n========================================\n");
+    printf("Analisando evidencias contra %s...\n", acusado);
+    printf("========================================\n\n");
+    
+    // Contar pistas que apontam para o acusado
+    contarPistasPorSuspeito(arvorePistas, hash, acusado, &pistasEncontradas);
+    
+    printf("Pistas encontradas apontando para %s: %d\n\n", acusado, pistasEncontradas);
+    
+    // Verificar se há evidências suficientes (mínimo 2 pistas)
+    if(pistasEncontradas >= 2) {
+        printf("========================================\n");
+        printf("       CASO RESOLVIDO!\n");
+        printf("========================================\n");
+        printf("Parabens, detetive!\n");
+        printf("Voce reuniu evidencias suficientes contra %s.\n", acusado);
+        printf("O culpado foi preso e a justica prevaleceu!\n");
+        printf("========================================\n");
+    } else if(pistasEncontradas == 1) {
+        printf("========================================\n");
+        printf("       EVIDENCIAS INSUFICIENTES\n");
+        printf("========================================\n");
+        printf("Voce encontrou apenas 1 pista contra %s.\n", acusado);
+        printf("Sao necessarias pelo menos 2 pistas para uma acusacao.\n");
+        printf("O suspeito foi liberado por falta de provas...\n");
+        printf("========================================\n");
+    } else {
+        printf("========================================\n");
+        printf("       ACUSACAO INCORRETA\n");
+        printf("========================================\n");
+        printf("Nenhuma pista aponta para %s.\n", acusado);
+        printf("O verdadeiro culpado escapou!\n");
+        printf("Tente novamente explorando mais comodos.\n");
+        printf("========================================\n");
+    }
 }
 
 /**
